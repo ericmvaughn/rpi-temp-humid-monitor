@@ -1,7 +1,7 @@
 <?php
 $servername = "localhost";
-$username = "USERNAME";
-$password = "PASSWORD";
+$username = "root";
+$password = "password";
 $dbname = "Monitoring";
 
 $rows = array();
@@ -10,7 +10,8 @@ $table['cols'] = array(
     // Labels for your chart, these represent the column titles
     array('label' => 'Date and Time', 'type' => 'number'),
     array('label' => 'Temperature', 'type' => 'number'),
-    array('label' => 'Humidity', 'type' => 'number')
+    array('label' => 'Humidity', 'type' => 'number'),
+    array('label' => 'Power', 'type' => 'number')
 ); 
 
 // Create connection
@@ -21,7 +22,8 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-$sql = "SELECT ComputerTime, Temperature, Humidity from TempHumid ORDER BY id DESC LIMIT 360";
+//$sql = "SELECT ComputerTime, Temperature, Humidity, Power from TempHumid ORDER BY ComputerTime DESC LIMIT 360";
+$sql = "SELECT ComputerTime, Temperature, Humidity, Power from TempHumid where ComputerTime >= (unix_timestamp(now())-(60*60*24*7))";
 $result = mysqli_query($conn,$sql);
 
 //if ($result->num_rows > 0) {
@@ -33,6 +35,7 @@ $result = mysqli_query($conn,$sql);
        $temp[] = array('v' => $row[0]); 
        $temp[] = array('v' => $row[1]); 
        $temp[] = array('v' => $row[2]); 
+       $temp[] = array('v' => $row[3]); 
        $rows[] = array('c' => $temp); 
     }
 //} else {

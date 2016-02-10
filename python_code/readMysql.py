@@ -4,6 +4,7 @@
 ##
 import sys
 import MySQLdb
+import time
 
 def main(host, db, user, passwd, logging, sql_retries, sql_timeout):
     logging.debug('Reading MySQL database next ...')
@@ -31,5 +32,5 @@ def main(host, db, user, passwd, logging, sql_retries, sql_timeout):
             attempts += 1
             if attempts == sql_retries:
                 logging.error('All configured attempts to read the MySQL database have failed. We are going to skip this attempt.')
-            time.sleep(sql_interval)
+            time.sleep(sql_timeout)
     return oldtemp, oldhumid

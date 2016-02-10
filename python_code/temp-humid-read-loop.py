@@ -1,8 +1,11 @@
-#/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
 import sys
-import dhtreader
+#import dhtreader
+import Adafruit_DHT
+from smartplug import SmartPlug
+
 import updateMysql
 import ConfigParser
 import time
@@ -45,30 +48,38 @@ def sensorRead(hwtype, pin, retries, timeout, maxtemp, mintemp, tempdiff, maxhum
     logging.debug('This round of results started at {0}'.format(startTime))
     for num in range(retries):
         try:
-            t, h = dhtreader.read(dev_type, dhtpin)
-        except:
+            #t, h = dhtreader.read(dev_type, dhtpin)
+            h, t = Adafruit_DHT.read(dev_type, dhtpin)
+            p = float(plug.power)
+            #logging.info('Temperature, humidity, and power read as {0}, {1}, and {2}'.format(t, h, p))
+        except Exception as e:
             if ((num + 1) < retries):
-                logging.warning('Exception detected! We will retry. Loop number: %d', num)
+                logging.warning('Exception detected - %s ', str(e))
+                logging.warning(' Retry loop number: %d', num)
                 time.sleep(timeout)
             else:
-                logging.error('Exception detected - we are out of retries. Skipping the measurement in this cycle.')
+                logging.error('Exception detected - %s', str(e))
+                logging.error('  Out of retries. Skipping the measurement in this cycle.')
         else:
             if t and h:
+                # change the temperature to F
+                t = t * 9/5 +32
                 logging.debug('Temperature and humidity read as {0} and {1}'.format(t, h))
                 logging.debug('Temperature and Humidity differences allowed: {0} and {1}'.format(tempdiff, humiddiff))
-                if (oldtemp != "NULL") and ((t - oldtemp < tempdiff) or (oldtemp - t < tempdiff)) and ((h - oldhumid < humiddiff) or (oldhumid - h < humiddiff)):
+                if (oldtemp != "NULL") and (t > oldtemp - tempdiff) and (t < oldtemp + tempdiff) and (h > oldhumid - humiddiff) and (h < oldhumid + humiddiff):
                     logging.debug('Current temperature close enough to previous temperature and previous temperature is not NULL, it is: %s', oldtemp)
                     logging.debug('Current humidity close enough to previous humidity and previous humidity is not NULL, it is: %s', oldhumid)
-                if (t < maxtemp) and (t > mintemp) and (h < maxhumid) and (h > minhumid):
-                    logging.debug('Temperature is less than {0} and greater than {1}, humidity is less than {2} and greater than {3}'.format(maxtemp,mintemp,maxhumid,minhumid))
-                    updateMysql.main(t, h, host, db, username, password, logging, sql_retries, sql_timeout)
-                    oldtemp=t
-                    oldhumid=h
-                    break
-                else:
-                    logging.error('Temperature {0} or humidity {1} is outside of allowable values - error! Check your configuration.'.format(t, h))
+                    if (t < maxtemp) and (t > mintemp) and (h < maxhumid) and (h > minhumid):
+                        logging.debug('Temperature is less than {0} and greater than {1}, humidity is less than {2} and greater than {3}'.format(maxtemp,mintemp,maxhumid,minhumid))
+                        updateMysql.main(t, h, p, host, db, username, password, logging, sql_retries, sql_timeout)
+                        oldtemp=t
+                        oldhumid=h
+                        break
+                logging.error('Temperature {0} or humidity {1} is outside of allowable values - error! Check your configuration.'.format(t, h))
+                oldtemp=t
+                oldhumid=h
             else:
-                    logging.warning('Failed to read from sensor, maybe try again?')
+                logging.warning('Failed to read from sensor, maybe try again?')
     endTime=datetime.now()
     logging.debug('This round of results ended at {0}'.format(endTime))
     duration = endTime - startTime
@@ -100,6 +111,9 @@ username=(config.get('database', 'username'))
 password=(config.get('database', 'password'))
 sql_retries=int((config.get('database', 'sql_retries')))
 sql_timeout=(config.get('database', 'sql_timeout'))
+sp_host=(config.get('smartplug', 'sp_host'))
+sp_user = (config.get('smartplug', 'sp_user'))
+sp_password = (config.get('smartplug', 'sp_password'))
 
 
 if loglevel == "debug":
@@ -113,7 +127,7 @@ elif loglevel == "error":
 else:
     logging.basicConfig(filename = logfile, format='%(asctime)s %(levelname)s:%(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=logging.CRITICAL)
 
-dhtreader.init()
+#dhtreader.init()
 
 dev_type = None
 if hwtype == "11":
@@ -123,7 +137,8 @@ elif hwtype == "22":
     dev_type = DHT22
     logging.info('Configured to use DHT22 device')
 elif hwtype == "2302":
-    dev_type = AM2302
+    #dev_type = AM2302
+    dev_type = Adafruit_DHT.AM2302
     logging.info('Configured to use AM2303 device')
 else:
     logging.warn('Invalid hardware type, only DHT11, DHT22 and AM 2302 are supported for now.!')
@@ -136,6 +151,22 @@ if dhtpin <= 0:
 
 logging.info("using pin #{0}".format(dhtpin))
 logging.info('Multiple (infinte looped)  run temperature and humidity reading. [version: 1.0, Jonathan Ervine, 2015-06-17]')
+
+
+"""
+    Simple class to access a "EDIMAX Smart Plug Switch SP-1101W"
+
+    Usage example when used as library:
+
+    p = SmartPlug("172.16.100.75", ('admin', '1234'))
+
+    # get device power
+    print(p.power)
+"""
+
+logging.info("setting up to read the smart plug, host: {0}, user: {1}, password: {2}".format(sp_host,sp_user,sp_password))
+plug = SmartPlug(sp_host, (sp_user, sp_password))
+#print(plug.power)
 
 logging.debug("About to enter infinite loop")
 exec_every_n_seconds(60,sensorRead,hwtype,pin,retries,timeout,maxtemp,mintemp,tempdiff,maxhumid,minhumid,humiddiff)
